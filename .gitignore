@@ -1,0 +1,42 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+modules.xml
+
+# Mac
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Misc
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Application config (no subir con contraseñas!)
+# application.conf  # ← Comentado, lo subiremos sin datos sensibles
+
+# System
+*.swp
+*.swo
+*~
+
+# H2 Database files
+*.db
+*.trace.db
+
+# Gradle cache
+.gradle
