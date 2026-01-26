@@ -35,6 +35,15 @@ dependencies {
     // Testing
     testImplementation("io.ktor:ktor-server-tests:$ktorVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:1.9.23")
+
+
+    // HTML y páginas de error (IMPORTANTE: usa JVM)
+    implementation("io.ktor:ktor-server-html-builder-jvm:$ktorVersion")
+    implementation("io.ktor:ktor-server-status-pages-jvm:$ktorVersion")
+
+    // Kotlinx HTML (usa versión compatible)
+    implementation("org.jetbrains.kotlinx:kotlinx-html:0.9.1")
+
 }
 
 // CONFIGURACIÓN JAVA
