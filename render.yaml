@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: ktor-breadcrumbs
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: JAVA_OPTS
+        value: "-Xmx300m -Xms150m"
+    autoDeploy: true

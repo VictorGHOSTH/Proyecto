@@ -13,7 +13,6 @@ repositories {
 }
 
 dependencies {
-
     val ktorVersion = "2.3.9"
 
     // Core
@@ -25,28 +24,27 @@ dependencies {
     // Logging
     implementation("ch.qos.logback:logback-classic:1.5.12")
 
-    // BASE DE DATOS
-    implementation("org.postgresql:postgresql:42.7.3")
-    implementation("org.jetbrains.exposed:exposed-core:0.48.0")
-    implementation("org.jetbrains.exposed:exposed-dao:0.48.0")
-    implementation("org.jetbrains.exposed:exposed-jdbc:0.48.0")
-    implementation("org.jetbrains.exposed:exposed-java-time:0.48.0")
+    // HTML y páginas de error
+    implementation("io.ktor:ktor-server-html-builder:$ktorVersion")  // ✅ Quita -jvm
+    implementation("io.ktor:ktor-server-status-pages:$ktorVersion")   // ✅ Quita -jvm
+
+    // Kotlinx HTML
+    implementation("org.jetbrains.kotlinx:kotlinx-html:0.9.1")
+
+    // BASE DE DATOS (COMENTADO temporalmente para Render Free)
+    // En Render Free no tienes PostgreSQL gratis
+    // Si quieres DB, usa SQLite o variables de entorno
+    // implementation("org.postgresql:postgresql:42.7.3")
+    // implementation("org.jetbrains.exposed:exposed-core:0.48.0")
+    // implementation("org.jetbrains.exposed:exposed-dao:0.48.0")
+    // implementation("org.jetbrains.exposed:exposed-jdbc:0.48.0")
+    // implementation("org.jetbrains.exposed:exposed-java-time:0.48.0")
 
     // Testing
     testImplementation("io.ktor:ktor-server-tests:$ktorVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:1.9.23")
-
-
-    // HTML y páginas de error (IMPORTANTE: usa JVM)
-    implementation("io.ktor:ktor-server-html-builder-jvm:$ktorVersion")
-    implementation("io.ktor:ktor-server-status-pages-jvm:$ktorVersion")
-
-    // Kotlinx HTML (usa versión compatible)
-    implementation("org.jetbrains.kotlinx:kotlinx-html:0.9.1")
-
 }
 
-// CONFIGURACIÓN JAVA
 kotlin {
     jvmToolchain(17)
 }
@@ -55,7 +53,59 @@ tasks.withType<KotlinCompile> {
     kotlinOptions.jvmTarget = "17"
 }
 
-// APLICACIÓN PRINCIPAL
 application {
     mainClass.set("com.example.MainKt")
+}
+
+// ✅ CONFIGURACIÓN PARA JAR EJECUTABLE (FAT JAR)
+tasks.jar {
+    manifest {
+        attributes(
+            "Main-Class" to application.mainClass.get(),
+            "Implementation-Version" to project.version
+        )
+    }
+
+    // Crear un FAT JAR (incluye dependencias)
+    from(configurations.runtimeClasspath.get().map {
+        if (it.isDirectory) it else zipTree(it)
+    })
+
+    // Estrategia para duplicados
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    // Excluir archivos de firma
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
+}
+
+// ✅ TAREA PARA CREAR JAR CON TODAS LAS DEPENDENCIAS
+tasks.register<Jar>("fatJar") {
+    archiveBaseName.set("ktor-app")
+    archiveClassifier.set("fat")
+
+    manifest {
+        attributes("Main-Class" to application.mainClass.get())
+    }
+
+    from(sourceSets.main.get().output)
+    from(configurations.runtimeClasspath.get().map {
+        if (it.isDirectory) it else zipTree(it)
+    })
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+// ✅ CONFIGURACIÓN PARA PRODUCCIÓN
+tasks.withType<JavaExec> {
+    jvmArgs = listOf(
+        "-Xmx300m",  // Menos memoria para Render Free
+        "-Xms150m",
+        "-XX:+UseSerialGC",  // GC más ligero
+        "-Dfile.encoding=UTF-8"
+    )
+}
+
+// ✅ Asegurar que 'assemble' cree el fatJar
+tasks.named("assemble") {
+    dependsOn("fatJar")
 }

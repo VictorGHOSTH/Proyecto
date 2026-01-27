@@ -18,7 +18,10 @@ import java.time.Instant
 fun main() {
     println("Iniciando servidor en puerto 8080...")
 
-    embeddedServer(Netty, port = 8080) {
+    embeddedServer(Netty,
+        port = System.getenv("PORT")?.toIntOrNull() ?: 8080,
+        host = "0.0.0.0"  // ← CRÍTICO para Docker
+    ) {
         // Configurar manejo de errores
         configureStatusPages()
 
