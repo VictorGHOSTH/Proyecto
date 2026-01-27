@@ -424,11 +424,6 @@ fun main() {
                                     visibility: visible !important;
                                 }
                                 
-                                .g-recaptcha iframe {
-                                    border-radius: 8px;
-                                    border: 1px solid #cbd5e0 !important;
-                                }
-                                
                                 .form-buttons {
                                     display: flex;
                                     gap: 16px;
@@ -537,18 +532,19 @@ fun main() {
                                 let recaptchaToken = '';
                                 let recaptchaVerified = false;
                                 
-                                // Función para cargar reCAPTCHA dinámicamente
+                                // Función para cargar reCAPTCHA - SOLUCIÓN DEFINITIVA
                                 function loadRecaptcha() {
-                                    const scriptId = 'recaptcha-script';
+                                    console.log('Cargando reCAPTCHA...');
                                     
-                                    // Evitar cargar múltiples veces
-                                    if (document.getElementById(scriptId)) {
-                                        console.log('reCAPTCHA ya cargado');
+                                    // Verificar si ya está cargado
+                                    if (window.grecaptcha && window.grecaptcha.render) {
+                                        console.log('reCAPTCHA ya disponible');
+                                        renderRecaptcha();
                                         return;
                                     }
                                     
                                     // Mostrar estado de carga
-                                    const recaptchaDiv = document.querySelector('.g-recaptcha');
+                                    const recaptchaDiv = document.getElementById('recaptcha-widget');
                                     if (recaptchaDiv) {
                                         recaptchaDiv.innerHTML = \`
                                             <div class="recaptcha-loading">
@@ -558,23 +554,34 @@ fun main() {
                                         \`;
                                     }
                                     
-                                    // Cargar script de reCAPTCHA
+                                    // Crear script de reCAPTCHA
                                     const script = document.createElement('script');
-                                    script.id = scriptId;
-                                    script.src = 'https://www.google.com/recaptcha/api.js';
+                                    script.src = 'https://www.google.com/recaptcha/api.js?render=explicit&onload=onRecaptchaLoad';
                                     script.async = true;
                                     script.defer = true;
                                     document.head.appendChild(script);
+                                    
+                                    console.log('Script de reCAPTCHA agregado');
                                 }
                                 
                                 // Callback cuando reCAPTCHA se carga
-                                function onRecaptchaLoaded() {
-                                    console.log('reCAPTCHA cargado exitosamente');
+                                function onRecaptchaLoad() {
+                                    console.log('reCAPTCHA API cargada exitosamente');
+                                    renderRecaptcha();
+                                }
+                                
+                                // Renderizar el widget de reCAPTCHA
+                                function renderRecaptcha() {
+                                    console.log('Renderizando reCAPTCHA...');
                                     
-                                    // Renderizar reCAPTCHA v2
                                     if (typeof grecaptcha !== 'undefined' && grecaptcha.render) {
-                                        const recaptchaDiv = document.querySelector('.g-recaptcha');
+                                        const recaptchaDiv = document.getElementById('recaptcha-widget');
                                         if (recaptchaDiv) {
+                                            console.log('Encontrado div para reCAPTCHA');
+                                            
+                                            // Limpiar contenido previo
+                                            recaptchaDiv.innerHTML = '';
+                                            
                                             const widgetId = grecaptcha.render(recaptchaDiv, {
                                                 'sitekey': '6LfVDVcsAAAAAErTmnJNGjMvB19ND5u5wN9NKGde',
                                                 'callback': onRecaptchaSuccess,
@@ -584,9 +591,13 @@ fun main() {
                                                 'size': 'normal'
                                             });
                                             
-                                            // Guardar widget ID para futuras referencias
+                                            console.log('reCAPTCHA renderizado con ID:', widgetId);
                                             recaptchaDiv.dataset.widgetId = widgetId;
+                                        } else {
+                                            console.error('No se encontró el div con id="recaptcha-widget"');
                                         }
+                                    } else {
+                                        console.error('grecaptcha no está disponible');
                                     }
                                 }
                                 
@@ -601,23 +612,9 @@ fun main() {
                                     
                                     // Mostrar feedback visual
                                     const recaptchaContainer = document.querySelector('.recaptcha-container');
-                                    recaptchaContainer.style.borderColor = '#48bb78';
-                                    recaptchaContainer.style.boxShadow = '0 0 0 3px rgba(72, 187, 120, 0.1)';
-                                    
-                                    // Actualizar badge
-                                    const badge = document.querySelector('.recaptcha-badge');
-                                    if (badge) {
-                                        badge.innerHTML = \`
-                                            <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
-                                                <span style="color: #48bb78;">✓</span>
-                                                <span>Verificación completada</span>
-                                            </div>
-                                            <small style="margin-top: 4px; display: block;">
-                                                Este sitio está protegido por reCAPTCHA y se aplican la 
-                                                <a href="https://policies.google.com/privacy" target="_blank" style="color: #d6bcfa;">Política de privacidad</a> y los 
-                                                <a href="https://policies.google.com/terms" target="_blank" style="color: #d6bcfa;">Términos de servicio</a> de Google.
-                                            </small>
-                                        \`;
+                                    if (recaptchaContainer) {
+                                        recaptchaContainer.style.borderColor = '#48bb78';
+                                        recaptchaContainer.style.boxShadow = '0 0 0 3px rgba(72, 187, 120, 0.1)';
                                     }
                                 }
                                 
@@ -629,17 +626,9 @@ fun main() {
                                     
                                     // Restaurar estilos
                                     const recaptchaContainer = document.querySelector('.recaptcha-container');
-                                    recaptchaContainer.style.borderColor = '';
-                                    recaptchaContainer.style.boxShadow = '';
-                                    
-                                    // Restaurar badge
-                                    const badge = document.querySelector('.recaptcha-badge');
-                                    if (badge) {
-                                        badge.innerHTML = \`
-                                            Este sitio está protegido por reCAPTCHA y se aplican la 
-                                            <a href="https://policies.google.com/privacy" target="_blank">Política de privacidad</a> y los 
-                                            <a href="https://policies.google.com/terms" target="_blank">Términos de servicio</a> de Google.
-                                        \`;
+                                    if (recaptchaContainer) {
+                                        recaptchaContainer.style.borderColor = '';
+                                        recaptchaContainer.style.boxShadow = '';
                                     }
                                 }
                                 
@@ -649,8 +638,11 @@ fun main() {
                                     recaptchaToken = '';
                                     recaptchaVerified = false;
                                     
-                                    document.getElementById('recaptchaError').textContent = 'Error en la verificación. Por favor, recargue la página.';
-                                    document.getElementById('recaptchaError').style.display = 'block';
+                                    const errorElement = document.getElementById('recaptchaError');
+                                    if (errorElement) {
+                                        errorElement.textContent = 'Error en la verificación. Por favor, recargue la página.';
+                                        errorElement.style.display = 'block';
+                                    }
                                 }
                                 
                                 // Validar reCAPTCHA
@@ -658,31 +650,40 @@ fun main() {
                                     const recaptchaError = document.getElementById('recaptchaError');
                                     
                                     if (!recaptchaVerified || !recaptchaToken) {
-                                        recaptchaError.textContent = 'Por favor, complete la verificación de seguridad';
-                                        recaptchaError.style.display = 'block';
+                                        if (recaptchaError) {
+                                            recaptchaError.textContent = 'Por favor, complete la verificación de seguridad';
+                                            recaptchaError.style.display = 'block';
+                                        }
                                         return false;
                                     }
                                     
-                                    recaptchaError.style.display = 'none';
+                                    if (recaptchaError) {
+                                        recaptchaError.style.display = 'none';
+                                    }
                                     return true;
                                 }
                                 
-                                // Para reCAPTCHA v2 (forzar verificación)
+                                // Resetear reCAPTCHA
                                 function resetRecaptcha() {
                                     if (typeof grecaptcha !== 'undefined') {
-                                        const recaptchaDiv = document.querySelector('.g-recaptcha');
+                                        const recaptchaDiv = document.getElementById('recaptcha-widget');
                                         if (recaptchaDiv && recaptchaDiv.dataset.widgetId) {
                                             grecaptcha.reset(recaptchaDiv.dataset.widgetId);
                                             onRecaptchaExpired();
+                                        } else {
+                                            // Recargar completamente si no hay widgetId
+                                            loadRecaptcha();
                                         }
                                     }
                                 }
                                 
+                                // Función principal de validación del formulario
                                 function validateForm() {
+                                    console.log('Validando formulario...');
                                     let isValid = true;
                                     const formData = {};
                                     
-                                    // Validar nombre completo (solo letras, max 40 caracteres)
+                                    // Validar nombre completo
                                     const nombreInput = document.getElementById('nombre');
                                     const nombreError = document.getElementById('nombreError');
                                     const nombreRegex = /^[A-Za-záéíóúÁÉÍÓÚñÑ\\s]{1,40}$/;
@@ -730,7 +731,7 @@ fun main() {
                                         formData.email = emailInput.value.trim();
                                     }
                                     
-                                    // Validar teléfono (exactamente 10 dígitos)
+                                    // Validar teléfono
                                     const telefonoInput = document.getElementById('telefono');
                                     const telefonoError = document.getElementById('telefonoError');
                                     const telefonoRegex = /^\\d{10}$/;
@@ -754,17 +755,13 @@ fun main() {
                                         formData.telefono = telefonoInput.value.trim();
                                     }
                                     
-                                    // Validar mensaje (solo palabras, máximo 20 palabras)
+                                    // Validar mensaje
                                     const mensajeTextarea = document.getElementById('mensaje');
                                     const mensajeError = document.getElementById('mensajeError');
                                     
                                     if (mensajeTextarea.value.trim()) {
                                         const mensaje = mensajeTextarea.value.trim();
-                                        
-                                        // Contar palabras
                                         const palabras = mensaje.split(/\\s+/).filter(word => word.length > 0);
-                                        
-                                        // Validar que solo contenga letras y espacios
                                         const soloLetrasRegex = /^[A-Za-záéíóúÁÉÍÓÚñÑ\\s]+$/;
                                         
                                         if (!soloLetrasRegex.test(mensaje)) {
@@ -786,11 +783,6 @@ fun main() {
                                             formData.mensaje = mensaje;
                                             formData.palabrasMensaje = palabras.length;
                                         }
-                                    } else {
-                                        // El mensaje es opcional, así que si está vacío no hay error
-                                        mensajeTextarea.classList.remove('error', 'success');
-                                        mensajeError.style.display = 'none';
-                                        formData.mensaje = '';
                                     }
                                     
                                     // Validar reCAPTCHA
@@ -798,7 +790,7 @@ fun main() {
                                         isValid = false;
                                     }
                                     
-                                    // Validar términos aceptados
+                                    // Validar términos
                                     const terminosCheckbox = document.getElementById('terminos');
                                     const terminosError = document.getElementById('terminosError');
                                     
@@ -816,12 +808,12 @@ fun main() {
                                     // Mostrar resultados si es válido
                                     if (isValid) {
                                         mostrarResultados(formData);
-                                        
-                                        // Resetear reCAPTCHA después de enviar
                                         setTimeout(resetRecaptcha, 1000);
+                                    } else {
+                                        console.log('Formulario inválido');
                                     }
                                     
-                                    return false; // Prevenir envío real del formulario
+                                    return false; // Prevenir envío real
                                 }
                                 
                                 function mostrarResultados(data) {
@@ -845,11 +837,8 @@ fun main() {
                                     
                                     resultadoContent.innerHTML = resultadoHTML;
                                     resultadoDiv.style.display = 'block';
-                                    
-                                    // Desplazar suavemente hacia los resultados
                                     resultadoDiv.scrollIntoView({ behavior: 'smooth' });
                                     
-                                    // Animación de éxito
                                     resultadoDiv.style.animation = 'pulse 0.5s ease-in-out';
                                     setTimeout(() => {
                                         resultadoDiv.style.animation = '';
@@ -860,134 +849,30 @@ fun main() {
                                     const form = document.getElementById('formularioBasico');
                                     form.reset();
                                     
-                                    // Limpiar clases de validación
                                     const inputs = form.querySelectorAll('.form-input, .textarea-field');
                                     for (let i = 0; i < inputs.length; i++) {
                                         inputs[i].classList.remove('error', 'success');
                                     }
                                     
-                                    // Ocultar mensajes de error
                                     const errors = form.querySelectorAll('.error-message');
                                     for (let i = 0; i < errors.length; i++) {
                                         errors[i].style.display = 'none';
                                     }
                                     
-                                    // Resetear reCAPTCHA
                                     resetRecaptcha();
                                     
-                                    // Ocultar resultados
                                     const resultadoDiv = document.getElementById('formResultado');
                                     resultadoDiv.style.display = 'none';
                                     
                                     return false;
                                 }
                                 
-                                // Validación en tiempo real
-                                function setupRealTimeValidation() {
-                                    const nombreInput = document.getElementById('nombre');
-                                    const emailInput = document.getElementById('email');
-                                    const telefonoInput = document.getElementById('telefono');
-                                    const mensajeTextarea = document.getElementById('mensaje');
-                                    
-                                    // Validar nombre mientras escribe (solo letras)
-                                    nombreInput.addEventListener('input', function(e) {
-                                        // Filtrar caracteres no deseados
-                                        this.value = this.value.replace(/[^A-Za-záéíóúÁÉÍÓÚñÑ\\s]/g, '');
-                                        
-                                        // Limitar a 40 caracteres
-                                        if (this.value.length > 40) {
-                                            this.value = this.value.substring(0, 40);
-                                        }
-                                        
-                                        if (this.value.trim()) {
-                                            const nombreRegex = /^[A-Za-záéíóúÁÉÍÓÚñÑ\\s]{1,40}$/;
-                                            if (nombreRegex.test(this.value)) {
-                                                this.classList.remove('error');
-                                                this.classList.add('success');
-                                            } else {
-                                                this.classList.add('error');
-                                                this.classList.remove('success');
-                                            }
-                                        }
-                                    });
-                                    
-                                    // Validar teléfono mientras escribe (solo números)
-                                    telefonoInput.addEventListener('input', function(e) {
-                                        // Solo permitir números
-                                        this.value = this.value.replace(/[^\\d]/g, '');
-                                        
-                                        // Limitar a 10 dígitos
-                                        if (this.value.length > 10) {
-                                            this.value = this.value.substring(0, 10);
-                                        }
-                                        
-                                        if (this.value.trim()) {
-                                            const telefonoRegex = /^\\d{10}$/;
-                                            if (telefonoRegex.test(this.value)) {
-                                                this.classList.remove('error');
-                                                this.classList.add('success');
-                                            } else {
-                                                this.classList.add('error');
-                                                this.classList.remove('success');
-                                            }
-                                        }
-                                    });
-                                    
-                                    // Validar mensaje mientras escribe
-                                    mensajeTextarea.addEventListener('input', function(e) {
-                                        const mensaje = this.value.trim();
-                                        
-                                        if (mensaje) {
-                                            // Contar palabras
-                                            const palabras = mensaje.split(/\\s+/).filter(word => word.length > 0);
-                                            
-                                            // Validar que solo contenga letras
-                                            const soloLetrasRegex = /^[A-Za-záéíóúÁÉÍÓÚñÑ\\s]+$/;
-                                            
-                                            if (!soloLetrasRegex.test(mensaje)) {
-                                                this.classList.add('error');
-                                                this.classList.remove('success');
-                                            } else if (palabras.length > 20) {
-                                                this.classList.add('error');
-                                                this.classList.remove('success');
-                                            } else {
-                                                this.classList.remove('error');
-                                                this.classList.add('success');
-                                            }
-                                            
-                                            // Mostrar contador de palabras
-                                            const contador = document.getElementById('contadorPalabras');
-                                            if (!contador) {
-                                                const contadorDiv = document.createElement('div');
-                                                contadorDiv.id = 'contadorPalabras';
-                                                contadorDiv.className = 'form-hint';
-                                                contadorDiv.style.marginTop = '5px';
-                                                contadorDiv.style.fontSize = '0.8rem';
-                                                contadorDiv.style.color = palabras.length > 20 ? '#e53e3e' : '#718096';
-                                                contadorDiv.textContent = 'Palabras: ' + palabras.length + '/20';
-                                                this.parentNode.insertBefore(contadorDiv, this.nextSibling);
-                                            } else {
-                                                contador.textContent = 'Palabras: ' + palabras.length + '/20';
-                                                contador.style.color = palabras.length > 20 ? '#e53e3e' : '#718096';
-                                            }
-                                        }
-                                    });
-                                    
-                                    // Limpiar contador cuando se resetea el formulario
-                                    document.getElementById('formularioBasico').addEventListener('reset', function() {
-                                        const contador = document.getElementById('contadorPalabras');
-                                        if (contador) {
-                                            contador.remove();
-                                        }
-                                    });
-                                }
-                                
                                 // Inicializar cuando se carga la página
                                 document.addEventListener('DOMContentLoaded', function() {
-                                    setupRealTimeValidation();
+                                    console.log('DOM cargado, inicializando reCAPTCHA...');
                                     
-                                    // Cargar reCAPTCHA
-                                    loadRecaptcha();
+                                    // Cargar reCAPTCHA con retardo para asegurar que el DOM esté listo
+                                    setTimeout(loadRecaptcha, 500);
                                     
                                     // Agregar estilos para animaciones
                                     const style = document.createElement('style');
@@ -1011,6 +896,35 @@ fun main() {
                                     \`;
                                     document.head.appendChild(style);
                                 });
+                                """
+                            }
+                        }
+                        // Asegurarse de que el div de reCAPTCHA tenga un ID específico
+                        script {
+                            unsafe {
+                                +"""
+                                // Inicializar onload global para reCAPTCHA
+                                window.onRecaptchaLoad = function() {
+                                    console.log('reCAPTCHA global loaded');
+                                    if (typeof grecaptcha !== 'undefined' && grecaptcha.render) {
+                                        const recaptchaDiv = document.getElementById('recaptcha-widget');
+                                        if (recaptchaDiv) {
+                                            recaptchaDiv.innerHTML = '';
+                                            const widgetId = grecaptcha.render(recaptchaDiv, {
+                                                'sitekey': '6LfVDVcsAAAAAErTmnJNGjMvB19ND5u5wN9NKGde',
+                                                'callback': function(response) {
+                                                    console.log('reCAPTCHA verified');
+                                                    window.recaptchaToken = response;
+                                                    window.recaptchaVerified = true;
+                                                    document.getElementById('recaptchaError').style.display = 'none';
+                                                },
+                                                'theme': 'light',
+                                                'size': 'normal'
+                                            });
+                                            recaptchaDiv.dataset.widgetId = widgetId;
+                                        }
+                                    }
+                                };
                                 """
                             }
                         }
@@ -1074,7 +988,7 @@ fun main() {
                                         attributes["id"] = "formularioBasico"
                                         attributes["onsubmit"] = "return validateForm();"
 
-                                        // Campo 1: Nombre completo (solo letras, max 40 caracteres)
+                                        // Campo 1: Nombre completo
                                         div("form-group") {
                                             label(classes = "form-label required") {
                                                 attributes["for"] = "nombre"
@@ -1084,8 +998,6 @@ fun main() {
                                                 attributes["id"] = "nombre"
                                                 attributes["placeholder"] = "Ingrese su nombre completo (solo letras)"
                                                 attributes["maxlength"] = "40"
-                                                attributes["pattern"] = "[A-Za-záéíóúÁÉÍÓÚñÑ\\s]+"
-                                                attributes["title"] = "Solo se permiten letras y espacios"
                                             }
                                             div("error-message") {
                                                 attributes["id"] = "nombreError"
@@ -1096,7 +1008,7 @@ fun main() {
                                             }
                                         }
 
-                                        // Campo 2: Email (validación de formato)
+                                        // Campo 2: Email
                                         div("form-group") {
                                             label(classes = "form-label required") {
                                                 attributes["for"] = "email"
@@ -1105,7 +1017,6 @@ fun main() {
                                             input(type = InputType.email, classes = "form-input") {
                                                 attributes["id"] = "email"
                                                 attributes["placeholder"] = "ejemplo@correo.com"
-                                                attributes["pattern"] = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
                                             }
                                             div("error-message") {
                                                 attributes["id"] = "emailError"
@@ -1116,7 +1027,7 @@ fun main() {
                                             }
                                         }
 
-                                        // Campo 3: Teléfono (solo números, exactamente 10 dígitos)
+                                        // Campo 3: Teléfono
                                         div("form-group") {
                                             label(classes = "form-label required") {
                                                 attributes["for"] = "telefono"
@@ -1126,8 +1037,6 @@ fun main() {
                                                 attributes["id"] = "telefono"
                                                 attributes["placeholder"] = "1234567890"
                                                 attributes["maxlength"] = "10"
-                                                attributes["pattern"] = "\\d{10}"
-                                                attributes["title"] = "Debe tener exactamente 10 dígitos numéricos"
                                             }
                                             div("error-message") {
                                                 attributes["id"] = "telefonoError"
@@ -1138,7 +1047,7 @@ fun main() {
                                             }
                                         }
 
-                                        // Campo 4: Mensaje (solo palabras, máximo 20 palabras)
+                                        // Campo 4: Mensaje
                                         div("form-group") {
                                             label(classes = "form-label") {
                                                 attributes["for"] = "mensaje"
@@ -1154,14 +1063,14 @@ fun main() {
                                                 +"Máximo 20 palabras, solo letras"
                                             }
                                             div("form-hint") {
-                                                +"Máximo 20 palabras, solo letras y espacios. No se permiten números ni símbolos."
+                                                +"Máximo 20 palabras, solo letras y espacios"
                                             }
                                         }
 
-                                        // Campo 5: reCAPTCHA v2
+                                        // Campo 5: reCAPTCHA v2 - CORREGIDO
                                         div("form-group") {
-                                            label(classes = "form-label required") {
-                                                attributes["for"] = "recaptcha"
+                                            // SOLUCIÓN: Eliminar el label con "for" incorrecto
+                                            div("form-label required") {
                                                 +"Verificación de seguridad"
                                             }
                                             div("recaptcha-container") {
@@ -1176,8 +1085,10 @@ fun main() {
                                                     }
                                                     +" de Google."
                                                 }
-                                                div("g-recaptcha") {
-                                                    // SITE KEY: 6LfVDVcsAAAAAErTmnJNGjMvB19ND5u5wN9NKGde
+                                                // CAMBIO CRÍTICO: Usar un ID específico
+                                                div {
+                                                    attributes["id"] = "recaptcha-widget"
+                                                    classes = setOf("g-recaptcha")
                                                 }
                                                 div("error-message") {
                                                     attributes["id"] = "recaptchaError"
@@ -1196,9 +1107,11 @@ fun main() {
                                                     attributes["id"] = "terminos"
                                                     attributes["required"] = "true"
                                                 }
-                                                label(classes = "checkbox-label required") {
+                                                label {
                                                     attributes["for"] = "terminos"
-                                                    +"Acepto los términos y condiciones"
+                                                    span("form-label required") {
+                                                        +"Acepto los términos y condiciones"
+                                                    }
                                                 }
                                             }
                                             div("error-message") {
