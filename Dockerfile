@@ -1,27 +1,47 @@
 # Dockerfile CORREGIDO
-FROM openjdk:17-jdk-slim AS builder
+FROM openjdk:17-slim AS builder
 
 WORKDIR /app
 
-# Copiar todo
-COPY . .
+# Copiar archivos necesarios para caché
+COPY gradlew .
+COPY gradle gradle
+COPY build.gradle.kts .
+COPY settings.gradle.kts .
+COPY src src
 
-# Dar permisos a gradlew
+# Dar permisos
 RUN chmod +x gradlew
 
-# Construir (usa --no-daemon para Docker)
+# Instalar dependencias para build
+RUN apt-get update && apt-get install -y \
+    curl \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Descargar dependencias
+RUN ./gradlew dependencies --no-daemon || true
+
+# Construir
 RUN ./gradlew clean fatJar --no-daemon
 
-# Runtime
-FROM openjdk:17-jre-slim
+# Runtime - usa la MISMA imagen (más simple)
+FROM openjdk:17-slim
 
 WORKDIR /app
 
-# Copiar JAR usando patrón (así funciona con cualquier versión)
+# Instalar curl para health check
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Copiar JAR
 COPY --from=builder /app/build/libs/*-fat.jar app.jar
 
 # Puerto
 EXPOSE 8080
 
-# Comando con límites de memoria para Render Free
-CMD ["java", "-Xmx300m", "-Xms150m", "-jar", "app.jar"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
+
+# Comando con límites de memoria
+CMD ["java", "-Xmx256m", "-Xms128m", "-XX:+UseSerialGC", "-jar", "app.jar"]
