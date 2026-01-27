@@ -561,7 +561,7 @@ fun main() {
                                     // Cargar script de reCAPTCHA
                                     const script = document.createElement('script');
                                     script.id = scriptId;
-                                    script.src = 'https://www.google.com/recaptcha/api.js?render=explicit&onload=onRecaptchaLoaded';
+                                    script.src = 'https://www.google.com/recaptcha/api.js';
                                     script.async = true;
                                     script.defer = true;
                                     document.head.appendChild(script);
