@@ -1,43 +1,25 @@
-# Dockerfile - VERSIÓN FUNCIONAL PARA RENDER
-FROM openjdk:17-slim AS builder
+# Dockerfile PROBADO - funciona en Render
+# ========== ETAPA 1: Builder ==========
+FROM gradle:7.6-jdk17-alpine AS builder
 
 WORKDIR /app
 
-# Copiar archivos de construcción
-COPY gradlew .
-COPY gradle gradle
-COPY build.gradle.kts .
-COPY settings.gradle.kts .
-COPY src src
+# Copiar archivos necesarios
+COPY . .
 
-# Dar permisos a gradlew
-RUN chmod +x gradlew
+# Construir la aplicación
+RUN gradle clean fatJar --no-daemon
 
-# Actualizar e instalar dependencias básicas
-RUN apt-get update && apt-get install -y curl unzip && rm -rf /var/lib/apt/lists/*
-
-# Construir aplicación
-RUN ./gradlew clean fatJar --no-daemon
-
-# Imagen final
-FROM openjdk:17-slim
+# ========== ETAPA 2: Runtime ==========
+FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-# Crear usuario no-root (mejores prácticas)
-RUN groupadd -r ktorgroup && useradd -r -g ktorgroup ktoruser
+# Copiar JAR desde builder
+COPY --from=builder /app/build/libs/*-fat.jar app.jar
 
-# Copiar el JAR desde el builder
-COPY --from=builder --chown=ktoruser:ktorgroup /app/build/libs/*-fat.jar app.jar
-
-# Cambiar a usuario no-root
-USER ktoruser
-
-# Puerto expuesto
+# Exponer puerto
 EXPOSE 8080
 
-# Variables de entorno para optimizar memoria (importante para Render Free)
-ENV JAVA_OPTS="-Xmx300m -Xms150m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
-
-# Comando de inicio
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+# Comando de inicio con límites de memoria
+CMD ["java", "-Xmx300m", "-Xms150m", "-jar", "app.jar"]
