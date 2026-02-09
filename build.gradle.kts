@@ -31,14 +31,19 @@ dependencies {
     // Kotlinx HTML
     implementation("org.jetbrains.kotlinx:kotlinx-html:0.9.1")
 
-    // BASE DE DATOS (COMENTADO temporalmente para Render Free)
-    // En Render Free no tienes PostgreSQL gratis
-    // Si quieres DB, usa SQLite o variables de entorno
-    // implementation("org.postgresql:postgresql:42.7.3")
-    // implementation("org.jetbrains.exposed:exposed-core:0.48.0")
-    // implementation("org.jetbrains.exposed:exposed-dao:0.48.0")
-    // implementation("org.jetbrains.exposed:exposed-jdbc:0.48.0")
-    // implementation("org.jetbrains.exposed:exposed-java-time:0.48.0")
+    // Exposed ORM
+    implementation("org.jetbrains.exposed:exposed-core:0.45.0")
+    implementation("org.jetbrains.exposed:exposed-dao:0.45.0")
+    implementation("org.jetbrains.exposed:exposed-jdbc:0.45.0")
+
+    // Para soporte de java.time en Exposed
+    implementation("org.jetbrains.exposed:exposed-java-time:0.45.0")
+
+    // PostgreSQL driver
+    implementation("org.postgresql:postgresql:42.7.3")
+
+    // HikariCP (pool de conexiones - opcional pero recomendado)
+    implementation("com.zaxxer:HikariCP:5.1.0")
 
     // Testing
     testImplementation("io.ktor:ktor-server-tests:$ktorVersion")

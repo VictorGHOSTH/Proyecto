@@ -14,6 +14,9 @@ import io.ktor.server.request.uri
 import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.request.*
 import java.time.Instant
+import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.transactions.transaction
 
 fun main() {
     println("Iniciando servidor en puerto 8080...")
@@ -22,6 +25,10 @@ fun main() {
         port = System.getenv("PORT")?.toIntOrNull() ?: 8080,
         host = "0.0.0.0"
     ) {
+
+        // CONFIGURAR BASE DE DATOS PRIMERO
+        configureDatabase()
+
         configureStatusPages()
         routing {
             intercept(ApplicationCallPipeline.Call) {
@@ -53,6 +60,23 @@ fun main() {
             // ========== PÁGINA PRINCIPAL CON DISEÑO MINIMALISTA ==========
             get("/") {
                 println("Sirviendo página principal")
+                // Manejar envío del formulario si existe
+                val palabraGuardada = call.parameters["palabra"]
+                var mensajeExito = ""
+
+                if (palabraGuardada != null && palabraGuardada.isNotBlank()) {
+                    try {
+                        transaction {
+                            PalabrasGuardadas.insert {
+                                it[palabra] = palabraGuardada.trim()
+                            }
+                        }
+                        mensajeExito = "✅ Palabra '${palabraGuardada.trim()}' guardada en la BD"
+                        println(mensajeExito)
+                    } catch (e: Exception) {
+                        println("❌ Error guardando palabra: ${e.message}")
+                    }
+                }
                 call.respondHtml {
                     head {
                         title { +"Sistema de Breadcrumbs" }
@@ -1198,6 +1222,78 @@ fun main() {
                     }
                     body {
                         div("main-container") {
+
+                            // ===== NUEVO: FORMULARIO PARA GUARDAR EN BD =====
+                            div("bd-test-container") {
+                                style = "background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 8px; padding: 20px; margin-bottom: 30px;"
+
+                                h3 {
+                                    style = "color: #212529; margin-bottom: 15px; font-weight: 500;"
+                                    +"🔍 Prueba de Base de Datos Neon"
+                                }
+
+                                p {
+                                    style = "color: #6c757d; margin-bottom: 15px; font-size: 0.95rem;"
+                                    +"Escribe una palabra para guardarla en PostgreSQL (Neon). Verifica en el dashboard de Neon que se guardó."
+                                }
+
+                                // Mostrar mensaje de éxito
+                                if (mensajeExito.isNotBlank()) {
+                                    div {
+                                        style = "background: #d1e7dd; color: #0f5132; padding: 10px 15px; border-radius: 4px; margin-bottom: 15px; border: 1px solid #badbcc;"
+                                        +mensajeExito
+                                    }
+                                }
+
+                                // Formulario
+                                form {
+                                    method = FormMethod.get
+                                    action = "/"
+
+                                    div("bd-form-group") {
+                                        style = "display: flex; gap: 10px; margin-bottom: 10px;"
+
+                                        input(type = InputType.text) {
+                                            name = "palabra"
+                                            placeholder = "Escribe una palabra (ej: hola, prueba, test)"
+                                            style = "flex: 1; padding: 10px 12px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.95rem;"
+                                            attributes["required"] = "true"
+                                            attributes["maxlength"] = "50"
+                                        }
+
+                                        button(type = ButtonType.submit) {
+                                            style = "background: #212529; color: white; border: none; border-radius: 4px; padding: 10px 20px; font-size: 0.95rem; cursor: pointer; transition: background 0.2s;"
+                                            +"Guardar en BD"
+                                        }
+                                    }
+
+                                    div("bd-form-hint") {
+                                        style = "font-size: 0.8rem; color: #6c757d; display: flex; align-items: center; gap: 5px;"
+                                        +"📍 Conectado a: "
+                                        code {
+                                            style = "background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-size: 0.75rem;"
+                                            +"Neon PostgreSQL"
+                                        }
+                                    }
+                                }
+
+                                // Enlace al dashboard de Neon
+                                div("bd-dashboard-link") {
+                                    style = "margin-top: 15px; padding-top: 15px; border-top: 1px solid #dee2e6;"
+
+                                    a(href = "https://console.neon.tech/app/projects", target = "_blank") {
+                                        style = "display: inline-flex; align-items: center; gap: 5px; color: #0d6efd; text-decoration: none; font-size: 0.85rem;"
+                                        +"🔗 Abrir dashboard de Neon"
+                                    }
+
+                                    span {
+                                        style = "color: #6c757d; font-size: 0.8rem; margin-left: 10px;"
+                                        +"para ver los datos guardados"
+                                    }
+                                }
+                            }
+                            // ===== FIN DEL FORMULARIO =====
+
                             // ===== HERO SECTION MINIMALISTA =====
                             div("hero-container") {
                                 div("header-section") {
@@ -2063,6 +2159,35 @@ fun main() {
         }
     }.start(wait = true)
 }
+
+fun Application.configureDatabase() {
+    val host = "ep-green-thunder-aifcls8i-pooler.c-4.us-east-1.aws.neon.tech"
+    val dbName = "neondb"
+    val user = "neondb_owner"
+    val password = "npg_hJaWEqNS6AV5"
+    val jdbcUrl = "jdbc:postgresql://$host/$dbName?sslmode=require"
+
+    try {
+        Database.connect(
+            url = jdbcUrl,
+            driver = "org.postgresql.Driver",
+            user = user,
+            password = password
+        )
+        println("✅ Conectado exitosamente a Neon PostgreSQL")
+
+        // Crear tablas si no existen
+        transaction {
+            SchemaUtils.create(PalabrasGuardadas)
+            println("✅ Tabla 'palabras_guardadas' verificada/creada")
+        }
+
+    } catch (e: Exception) {
+        println("❌ ERROR conectando a PostgreSQL: ${e.message}")
+    }
+}
+
+
 
 // Función CSS minimalista para las páginas de contenido (se mantiene igual)
 fun getMinimalistCSS(): String {
