@@ -17,6 +17,46 @@ import java.time.Instant
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.net.URLEncoder
+
+// Data class para almacenar los datos del formulario
+data class FormData(
+    val nombre: String = "",
+    val email: String = "",
+    val telefono: String = "",
+    val mensaje: String = "",
+    val recaptchaToken: String = "",
+    val terminosAceptados: Boolean = false
+)
+
+// Validador simple del formulario
+object FormValidator {
+    fun validate(formData: FormData): Boolean {
+        // Validaciones básicas
+        val nombreRegex = Regex("^[A-Za-záéíóúÁÉÍÓÚñÑüÜ\\s]+\$")
+        val emailRegex = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\$")
+        // NUEVO: Regex para mensaje (solo letras y espacios)
+        val mensajeRegex = Regex("^[A-Za-záéíóúÁÉÍÓÚñÑüÜ\\s]*\$")
+
+        return when {
+            formData.nombre.isBlank() -> false
+            !nombreRegex.matches(formData.nombre) -> false
+            formData.nombre.length > 40 -> false
+            formData.email.isBlank() -> false
+            !emailRegex.matches(formData.email) -> false
+            formData.telefono.isBlank() -> false
+            !formData.telefono.all { it.isDigit() } -> false
+            formData.telefono.length != 10 -> false
+            // NUEVA VALIDACIÓN: Mensaje solo letras y espacios
+            !mensajeRegex.matches(formData.mensaje) -> false
+            // Validar que no exceda 20 palabras (si se quiere mantener esa restricción)
+            formData.mensaje.split("\\s+".toRegex()).size > 20 -> false
+            formData.recaptchaToken.isBlank() -> false // Validación básica del token
+            !formData.terminosAceptados -> false
+            else -> true
+        }
+    }
+}
 
 fun main() {
     println("Iniciando servidor en puerto 8080...")
@@ -77,6 +117,16 @@ fun main() {
                         println("❌ Error guardando palabra: ${e.message}")
                     }
                 }
+
+                // Verificar si hay mensaje de éxito del formulario
+                val successMessage = call.parameters["success"]
+                val formMessage = call.parameters["message"]
+                var formSuccessMessage = ""
+
+                if (successMessage == "true" && formMessage != null) {
+                    formSuccessMessage = formMessage
+                }
+
                 call.respondHtml {
                     head {
                         title { +"Sistema de Breadcrumbs" }
@@ -537,6 +587,7 @@ fun main() {
                                 
                                 .form-group {
                                     margin-bottom: 20px;
+                                    position: relative;
                                 }
                                 
                                 .form-label {
@@ -560,12 +611,119 @@ fun main() {
                                     font-size: 0.95rem;
                                     color: #212121;
                                     background: white;
-                                    transition: border-color 0.2s;
+                                    transition: all 0.3s ease;
                                 }
                                 
                                 .form-input:focus {
                                     outline: none;
                                     border-color: #212121;
+                                    box-shadow: 0 0 0 2px rgba(33, 33, 33, 0.1);
+                                }
+                                
+                                /* ===== VALIDACIONES EN TIEMPO REAL CON HTML5/CSS ===== */
+                                /* Indicadores visuales para campos válidos/inválidos */
+                                .form-input:valid:not(:placeholder-shown) {
+                                    border-color: #4caf50;
+                                    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%234caf50' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+                                    background-repeat: no-repeat;
+                                    background-position: right 12px center;
+                                    background-size: 20px;
+                                    padding-right: 40px;
+                                }
+                                
+                                .form-input:invalid:not(:placeholder-shown) {
+                                    border-color: #f44336;
+                                    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23f44336' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'%3E%3C/circle%3E%3Cline x1='12' y1='8' x2='12' y2='12'%3E%3C/line%3E%3Cline x1='12' y1='16' x2='12.01' y2='16'%3E%3C/line%3E%3C/svg%3E");
+                                    background-repeat: no-repeat;
+                                    background-position: right 12px center;
+                                    background-size: 20px;
+                                    padding-right: 40px;
+                                }
+                                
+                                /* Mostrar mensajes de error en tiempo real */
+                                .real-time-error {
+                                    color: #f44336;
+                                    font-size: 0.8rem;
+                                    margin-top: 4px;
+                                    display: none;
+                                }
+                                
+                                .form-input:invalid:not(:placeholder-shown) + .real-time-error {
+                                    display: block;
+                                    animation: fadeIn 0.3s ease;
+                                }
+                                
+                                .form-input:valid:not(:placeholder-shown) + .real-time-error {
+                                    display: none;
+                                }
+                                
+                                @keyframes fadeIn {
+                                    from { opacity: 0; transform: translateY(-5px); }
+                                    to { opacity: 1; transform: translateY(0); }
+                                }
+                                
+                                /* Barra de progreso visual */
+                                .field-strength {
+                                    height: 3px;
+                                    background: #e0e0e0;
+                                    border-radius: 2px;
+                                    margin-top: 4px;
+                                    overflow: hidden;
+                                    position: relative;
+                                }
+                                
+                                .field-strength::after {
+                                    content: '';
+                                    position: absolute;
+                                    top: 0;
+                                    left: 0;
+                                    height: 100%;
+                                    width: 0;
+                                    background: #4caf50;
+                                    transition: width 0.3s ease;
+                                }
+                                
+                                .form-input:focus + .field-strength::after {
+                                    width: 100%;
+                                }
+                                
+                                .form-input:valid:not(:placeholder-shown) + .field-strength::after {
+                                    background: #4caf50;
+                                    width: 100%;
+                                }
+                                
+                                .form-input:invalid:not(:placeholder-shown) + .field-strength::after {
+                                    background: #f44336;
+                                    width: 100%;
+                                }
+                                
+                                /* Contador de palabras para textarea */
+                                .word-counter {
+                                    position: absolute;
+                                    right: 12px;
+                                    bottom: -20px;
+                                    font-size: 0.75rem;
+                                    color: #757575;
+                                    background: white;
+                                    padding: 2px 6px;
+                                    border-radius: 3px;
+                                    border: 1px solid #e0e0e0;
+                                }
+                                
+                                .word-counter.warning {
+                                    color: #ff9800;
+                                    border-color: #ff9800;
+                                }
+                                
+                                .word-counter.error {
+                                    color: #f44336;
+                                    border-color: #f44336;
+                                }
+                                
+                                /* Checkbox validation */
+                                .checkbox-group input[type="checkbox"]:invalid {
+                                    outline: 2px solid #f44336;
+                                    border-radius: 3px;
                                 }
                                 
                                 .form-input.error {
@@ -589,7 +747,7 @@ fun main() {
                                     color: #d32f2f;
                                     font-size: 0.8rem;
                                     margin-top: 4px;
-                                    display: none;
+                                    display: block;
                                 }
                                 
                                 .textarea-field {
@@ -772,10 +930,21 @@ fun main() {
                                     width: 18px;
                                     height: 18px;
                                 }
+                                
+                                /* Mensaje de éxito */
+                                .success-message {
+                                    background: #d4edda;
+                                    color: #155724;
+                                    padding: 12px 16px;
+                                    border-radius: 4px;
+                                    margin-bottom: 20px;
+                                    border: 1px solid #c3e6cb;
+                                    animation: fadeIn 0.5s ease;
+                                }
                                 """
                             }
                         }
-                        // CARGAR reCAPTCHA
+                        // CARGAR reCAPTCHA (mantener el original)
                         script {
                             src = "https://www.google.com/recaptcha/api.js"
                             async = true
@@ -784,33 +953,26 @@ fun main() {
                         script {
                             unsafe {
                                 +"""
-                                // Variable para almacenar la respuesta del reCAPTCHA
+                                // Solo las funciones necesarias para reCAPTCHA
                                 let recaptchaToken = '';
                                 let recaptchaVerified = false;
                                 
-                                // Callback cuando reCAPTCHA es exitoso
                                 function onRecaptchaSuccess(response) {
-                                    console.log('reCAPTCHA verificado exitosamente:', response);
+                                    console.log('reCAPTCHA verificado exitosamente');
                                     recaptchaToken = response;
                                     recaptchaVerified = true;
-                                    
-                                    // Quitar error si existía
-                                    document.getElementById('recaptchaError').style.display = 'none';
                                 }
                                 
-                                // Callback cuando reCAPTCHA expira
                                 function onRecaptchaExpired() {
                                     console.log('reCAPTCHA expirado');
                                     recaptchaToken = '';
                                     recaptchaVerified = false;
                                 }
                                 
-                                // Validar reCAPTCHA
                                 function validateRecaptcha() {
                                     const recaptchaError = document.getElementById('recaptchaError');
                                     
                                     if (!recaptchaVerified || !recaptchaToken) {
-                                        recaptchaError.textContent = 'Por favor, complete la verificación de seguridad';
                                         recaptchaError.style.display = 'block';
                                         return false;
                                     }
@@ -819,7 +981,6 @@ fun main() {
                                     return true;
                                 }
                                 
-                                // Resetear reCAPTCHA
                                 function resetRecaptcha() {
                                     if (typeof grecaptcha !== 'undefined') {
                                         grecaptcha.reset();
@@ -828,393 +989,29 @@ fun main() {
                                     recaptchaVerified = false;
                                 }
                                 
-                                // ===== VALIDACIONES EN TIEMPO REAL =====
-                                
-                                // Validar nombre en tiempo real (SOLO LETRAS)
-                                function validarNombreEnTiempoReal() {
-                                    const nombreInput = document.getElementById('nombre');
-                                    const nombreError = document.getElementById('nombreError');
-                                    const nombreRegex = /^[A-Za-záéíóúÁÉÍÓÚñÑüÜ\\s]*$/;
-                                    
-                                    const valor = nombreInput.value;
-                                    
-                                    if (valor && !nombreRegex.test(valor)) {
-                                        nombreInput.classList.add('error');
-                                        nombreInput.classList.remove('success');
-                                        nombreError.textContent = 'SOLO LETRAS Y ESPACIOS';
-                                        nombreError.style.display = 'block';
-                                    } else if (valor.length > 40) {
-                                        nombreInput.classList.add('error');
-                                        nombreInput.classList.remove('success');
-                                        nombreError.textContent = 'Máximo 40 caracteres';
-                                        nombreError.style.display = 'block';
-                                    } else if (valor && nombreRegex.test(valor)) {
-                                        nombreInput.classList.remove('error');
-                                        nombreInput.classList.add('success');
-                                        nombreError.style.display = 'none';
-                                    } else {
-                                        nombreInput.classList.remove('error');
-                                        nombreInput.classList.remove('success');
-                                        nombreError.style.display = 'none';
-                                    }
-                                }
-                                
-                                // Validar teléfono en tiempo real (SOLO NÚMEROS)
-                                function validarTelefonoEnTiempoReal() {
-                                    const telefonoInput = document.getElementById('telefono');
-                                    const telefonoError = document.getElementById('telefonoError');
-                                    
-                                    let valor = telefonoInput.value;
-                                    
-                                    // Remover todo excepto números
-                                    valor = valor.replace(/\\D/g, '');
-                                    telefonoInput.value = valor;
-                                    
-                                    if (valor && !/^\\d+$/.test(valor)) {
-                                        telefonoInput.classList.add('error');
-                                        telefonoInput.classList.remove('success');
-                                        telefonoError.textContent = 'SOLO NÚMEROS';
-                                        telefonoError.style.display = 'block';
-                                    } else if (valor.length > 10) {
-                                        telefonoInput.value = valor.slice(0, 10);
-                                        telefonoInput.classList.add('error');
-                                        telefonoInput.classList.remove('success');
-                                        telefonoError.textContent = 'Máximo 10 dígitos';
-                                        telefonoError.style.display = 'block';
-                                    } else if (valor.length === 10) {
-                                        telefonoInput.classList.remove('error');
-                                        telefonoInput.classList.add('success');
-                                        telefonoError.style.display = 'none';
-                                    } else if (valor) {
-                                        telefonoInput.classList.remove('error');
-                                        telefonoInput.classList.remove('success');
-                                        telefonoError.style.display = 'none';
-                                    } else {
-                                        telefonoInput.classList.remove('error');
-                                        telefonoInput.classList.remove('success');
-                                        telefonoError.style.display = 'none';
-                                    }
-                                }
-                                
-                                // Validar mensaje en tiempo real (SOLO LETRAS, MÁXIMO 20 PALABRAS)
-                                function validarMensajeEnTiempoReal() {
-                                    const mensajeTextarea = document.getElementById('mensaje');
-                                    const mensajeError = document.getElementById('mensajeError');
-                                    const contadorPalabras = document.getElementById('contadorPalabras');
-                                    
-                                    const valor = mensajeTextarea.value;
-                                    const soloLetrasRegex = /^[A-Za-záéíóúÁÉÍÓÚñÑüÜ\\s]*$/;
-                                    
-                                    // Contar palabras
-                                    const palabras = valor.trim().split(/\\s+/).filter(word => word.length > 0);
-                                    if (contadorPalabras) {
-                                        contadorPalabras.textContent = 'Palabras: ' + palabras.length + '/20';
-                                    }
-                                    
-                                    if (valor && !soloLetrasRegex.test(valor)) {
-                                        mensajeTextarea.classList.add('error');
-                                        mensajeTextarea.classList.remove('success');
-                                        mensajeError.textContent = 'SOLO LETRAS Y ESPACIOS';
-                                        mensajeError.style.display = 'block';
-                                        if (contadorPalabras) {
-                                            contadorPalabras.style.color = '#d32f2f';
-                                        }
-                                    } else if (palabras.length > 20) {
-                                        mensajeTextarea.classList.add('error');
-                                        mensajeTextarea.classList.remove('success');
-                                        mensajeError.textContent = 'Máximo 20 palabras. Actual: ' + palabras.length;
-                                        mensajeError.style.display = 'block';
-                                        if (contadorPalabras) {
-                                            contadorPalabras.style.color = '#d32f2f';
-                                        }
-                                    } else if (valor && soloLetrasRegex.test(valor) && palabras.length <= 20) {
-                                        mensajeTextarea.classList.remove('error');
-                                        mensajeTextarea.classList.add('success');
-                                        mensajeError.style.display = 'none';
-                                        if (contadorPalabras) {
-                                            contadorPalabras.style.color = '#757575';
-                                        }
-                                    } else {
-                                        mensajeTextarea.classList.remove('error');
-                                        mensajeTextarea.classList.remove('success');
-                                        mensajeError.style.display = 'none';
-                                        if (contadorPalabras) {
-                                            contadorPalabras.style.color = '#757575';
-                                        }
-                                    }
-                                }
-                                
-                                // ===== FUNCIÓN PRINCIPAL DE VALIDACIÓN (AL ENVIAR) =====
-                                function validateForm(event) {
-                                    event.preventDefault();
-                                    console.log('Validando formulario...');
-                                    let isValid = true;
-                                    const formData = {};
-                                    
-                                    // ===== VALIDACIÓN DE NOMBRE (SOLO LETRAS) =====
-                                    const nombreInput = document.getElementById('nombre');
-                                    const nombreError = document.getElementById('nombreError');
-                                    const nombreRegex = /^[A-Za-záéíóúÁÉÍÓÚñÑüÜ\\s]+$/;
-                                    
-                                    if (!nombreInput.value.trim()) {
-                                        nombreInput.classList.add('error');
-                                        nombreInput.classList.remove('success');
-                                        nombreError.textContent = 'Este campo es obligatorio';
-                                        nombreError.style.display = 'block';
-                                        isValid = false;
-                                    } else if (!nombreRegex.test(nombreInput.value)) {
-                                        nombreInput.classList.add('error');
-                                        nombreInput.classList.remove('success');
-                                        nombreError.textContent = 'SOLO LETRAS (no números ni caracteres especiales)';
-                                        nombreError.style.display = 'block';
-                                        isValid = false;
-                                    } else if (nombreInput.value.trim().length > 40) {
-                                        nombreInput.classList.add('error');
-                                        nombreInput.classList.remove('success');
-                                        nombreError.textContent = 'Máximo 40 caracteres';
-                                        nombreError.style.display = 'block';
-                                        isValid = false;
-                                    } else {
-                                        nombreInput.classList.remove('error');
-                                        nombreInput.classList.add('success');
-                                        nombreError.style.display = 'none';
-                                        formData.nombre = nombreInput.value.trim();
-                                    }
-                                    
-                                    // ===== VALIDACIÓN DE EMAIL =====
-                                    const emailInput = document.getElementById('email');
-                                    const emailError = document.getElementById('emailError');
-                                    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/;
-                                    
-                                    if (!emailInput.value.trim()) {
-                                        emailInput.classList.add('error');
-                                        emailInput.classList.remove('success');
-                                        emailError.textContent = 'Este campo es obligatorio';
-                                        emailError.style.display = 'block';
-                                        isValid = false;
-                                    } else if (!emailRegex.test(emailInput.value)) {
-                                        emailInput.classList.add('error');
-                                        emailInput.classList.remove('success');
-                                        emailError.textContent = 'Formato de email inválido (ejemplo: usuario@dominio.com)';
-                                        emailError.style.display = 'block';
-                                        isValid = false;
-                                    } else {
-                                        emailInput.classList.remove('error');
-                                        emailInput.classList.add('success');
-                                        emailError.style.display = 'none';
-                                        formData.email = emailInput.value.trim();
-                                    }
-                                    
-                                    // ===== VALIDACIÓN DE TELÉFONO (SOLO NÚMEROS) =====
-                                    const telefonoInput = document.getElementById('telefono');
-                                    const telefonoError = document.getElementById('telefonoError');
-                                    
-                                    if (!telefonoInput.value.trim()) {
-                                        telefonoInput.classList.add('error');
-                                        telefonoInput.classList.remove('success');
-                                        telefonoError.textContent = 'Este campo es obligatorio';
-                                        telefonoError.style.display = 'block';
-                                        isValid = false;
-                                    } else {
-                                        const telefonoLimpio = telefonoInput.value.replace(/\\D/g, '');
-                                        
-                                        if (telefonoLimpio.length !== 10) {
-                                            telefonoInput.classList.add('error');
-                                            telefonoInput.classList.remove('success');
-                                            telefonoError.textContent = 'Debe tener exactamente 10 dígitos (actual: ' + telefonoLimpio.length + ')';
-                                            telefonoError.style.display = 'block';
-                                            isValid = false;
-                                        } else if (!/^\\d+$/.test(telefonoLimpio)) {
-                                            telefonoInput.classList.add('error');
-                                            telefonoInput.classList.remove('success');
-                                            telefonoError.textContent = 'SOLO NÚMEROS (no letras ni caracteres especiales)';
-                                            telefonoError.style.display = 'block';
-                                            isValid = false;
-                                        } else {
-                                            telefonoInput.classList.remove('error');
-                                            telefonoInput.classList.add('success');
-                                            telefonoError.style.display = 'none';
-                                            formData.telefono = telefonoLimpio;
-                                        }
-                                    }
-                                    
-                                    // ===== VALIDACIÓN DE MENSAJE (SOLO LETRAS, MÁXIMO 20 PALABRAS) =====
-                                    const mensajeTextarea = document.getElementById('mensaje');
-                                    const mensajeError = document.getElementById('mensajeError');
-                                    
-                                    if (mensajeTextarea.value.trim()) {
-                                        const mensaje = mensajeTextarea.value.trim();
-                                        const palabras = mensaje.split(/\\s+/).filter(word => word.length > 0);
-                                        const soloLetrasRegex = /^[A-Za-záéíóúÁÉÍÓÚñÑüÜ\\s]+$/;
-                                        
-                                        if (!soloLetrasRegex.test(mensaje)) {
-                                            mensajeTextarea.classList.add('error');
-                                            mensajeTextarea.classList.remove('success');
-                                            mensajeError.textContent = 'SOLO LETRAS Y ESPACIOS (no números ni caracteres especiales)';
-                                            mensajeError.style.display = 'block';
-                                            isValid = false;
-                                        } else if (palabras.length > 20) {
-                                            mensajeTextarea.classList.add('error');
-                                            mensajeTextarea.classList.remove('success');
-                                            mensajeError.textContent = 'Máximo 20 palabras. Actual: ' + palabras.length + ' palabras';
-                                            mensajeError.style.display = 'block';
-                                            isValid = false;
-                                        } else {
-                                            mensajeTextarea.classList.remove('error');
-                                            mensajeTextarea.classList.add('success');
-                                            mensajeError.style.display = 'none';
-                                            formData.mensaje = mensaje;
-                                            formData.palabrasMensaje = palabras.length;
-                                        }
-                                    } else {
-                                        mensajeTextarea.classList.remove('error');
-                                        mensajeTextarea.classList.remove('success');
-                                        mensajeError.style.display = 'none';
-                                    }
-                                    
-                                    // ===== VALIDACIÓN DE reCAPTCHA =====
-                                    if (!validateRecaptcha()) {
-                                        isValid = false;
-                                    }
-                                    
-                                    // ===== VALIDACIÓN DE TÉRMINOS =====
-                                    const terminosCheckbox = document.getElementById('terminos');
-                                    const terminosError = document.getElementById('terminosError');
-                                    
-                                    if (!terminosCheckbox.checked) {
-                                        terminosError.style.display = 'block';
-                                        isValid = false;
-                                    } else {
-                                        terminosError.style.display = 'none';
-                                        formData.terminosAceptados = true;
-                                    }
-                                    
-                                    formData.recaptchaToken = recaptchaToken;
-                                    
-                                    if (isValid) {
-                                        mostrarResultados(formData);
-                                        setTimeout(resetRecaptcha, 1000);
-                                    } else {
-                                        console.log('Formulario inválido');
-                                        const primerError = document.querySelector('.form-input.error, .textarea-field.error');
-                                        if (primerError) {
-                                            primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                            primerError.focus();
-                                        }
-                                    }
-                                    
-                                    return false;
-                                }
-                                
-                                function mostrarResultados(data) {
-                                    const resultadoDiv = document.getElementById('formResultado');
-                                    const resultadoContent = document.getElementById('resultadoContent');
-                                    
-                                    const mensajeTexto = data.mensaje ? data.mensaje : 'No proporcionado';
-                                    const palabrasTexto = data.palabrasMensaje ? data.palabrasMensaje + ' palabras' : 'N/A';
-                                    const terminosTexto = data.terminosAceptados ? 'Sí' : 'No';
-                                    const fechaTexto = new Date().toLocaleString();
-                                    
-                                    let resultadoHTML = '<div class="result-item">';
-                                    resultadoHTML += '<strong>Nombre:</strong> ' + data.nombre + '</div>';
-                                    resultadoHTML += '<div class="result-item"><strong>Email:</strong> ' + data.email + '</div>';
-                                    resultadoHTML += '<div class="result-item"><strong>Teléfono:</strong> ' + data.telefono + '</div>';
-                                    resultadoHTML += '<div class="result-item"><strong>Mensaje:</strong> ' + mensajeTexto + '</div>';
-                                    resultadoHTML += '<div class="result-item"><strong>Palabras en mensaje:</strong> ' + palabrasTexto + '</div>';
-                                    resultadoHTML += '<div class="result-item"><strong>reCAPTCHA verificado:</strong> Sí</div>';
-                                    resultadoHTML += '<div class="result-item"><strong>Términos aceptados:</strong> ' + terminosTexto + '</div>';
-                                    resultadoHTML += '<div class="result-item"><strong>Fecha de envío:</strong> ' + fechaTexto + '</div>';
-                                    
-                                    resultadoContent.innerHTML = resultadoHTML;
-                                    resultadoDiv.style.display = 'block';
-                                    resultadoDiv.scrollIntoView({ behavior: 'smooth' });
-                                    
-                                    resultadoDiv.style.animation = 'pulse 0.5s ease-in-out';
-                                    setTimeout(() => {
-                                        resultadoDiv.style.animation = '';
-                                    }, 500);
-                                }
-                                
-                                function resetForm() {
-                                    const form = document.getElementById('formularioBasico');
-                                    form.reset();
-                                    
-                                    const inputs = form.querySelectorAll('.form-input, .textarea-field');
-                                    for (let i = 0; i < inputs.length; i++) {
-                                        inputs[i].classList.remove('error', 'success');
-                                    }
-                                    
-                                    const errors = form.querySelectorAll('.error-message');
-                                    for (let i = 0; i < errors.length; i++) {
-                                        errors[i].style.display = 'none';
-                                    }
-                                    
-                                    resetRecaptcha();
-                                    
-                                    const resultadoDiv = document.getElementById('formResultado');
-                                    resultadoDiv.style.display = 'none';
-                                    
-                                    return false;
-                                }
-                                
-                                // Inicializar cuando se carga la página
+                                // Modificar el envío del formulario para validar reCAPTCHA
                                 document.addEventListener('DOMContentLoaded', function() {
-                                    console.log('DOM cargado');
+                                    const form = document.querySelector('form[action="/submit-form"]');
+                                    if (form) {
+                                        form.addEventListener('submit', function(event) {
+                                            // Validar reCAPTCHA antes de enviar
+                                            if (!validateRecaptcha()) {
+                                                event.preventDefault();
+                                                // Desplazarse al reCAPTCHA
+                                                const recaptchaError = document.getElementById('recaptchaError');
+                                                recaptchaError.scrollIntoView({ behavior: 'smooth' });
+                                            }
+                                            // Las validaciones HTML5/CSS se encargan del resto
+                                        });
+                                    }
                                     
-                                    // Agregar estilos para animaciones
-                                    const style = document.createElement('style');
-                                    style.textContent = '@keyframes pulse {0% { transform: scale(1); }50% { transform: scale(1.02); }100% { transform: scale(1); }}.result-item {margin-bottom: 8px;padding-bottom: 8px;border-bottom: 1px solid #e0e0e0;}.result-item:last-child {border-bottom: none;margin-bottom: 0;}';
-                                    document.head.appendChild(style);
-                                    
-                                    // Crear contador de palabras para el mensaje
-                                    const mensajeTextarea = document.getElementById('mensaje');
-                                    const contadorPalabras = document.createElement('div');
-                                    contadorPalabras.className = 'form-hint';
-                                    contadorPalabras.id = 'contadorPalabras';
-                                    contadorPalabras.textContent = 'Palabras: 0/20';
-                                    mensajeTextarea.parentNode.insertBefore(contadorPalabras, mensajeTextarea.nextSibling);
-                                    
-                                    // Configurar eventos en tiempo real
-                                    const nombreInput = document.getElementById('nombre');
-                                    nombreInput.addEventListener('input', validarNombreEnTiempoReal);
-                                    nombreInput.addEventListener('blur', validarNombreEnTiempoReal);
-                                    
-                                    const telefonoInput = document.getElementById('telefono');
-                                    telefonoInput.addEventListener('input', validarTelefonoEnTiempoReal);
-                                    telefonoInput.addEventListener('blur', validarTelefonoEnTiempoReal);
-                                    
-                                    mensajeTextarea.addEventListener('input', validarMensajeEnTiempoReal);
-                                    mensajeTextarea.addEventListener('blur', validarMensajeEnTiempoReal);
-                                    
-                                    // Email también en tiempo real
-                                    const emailInput = document.getElementById('email');
-                                    emailInput.addEventListener('blur', function() {
-                                        const emailError = document.getElementById('emailError');
-                                        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/;
-                                        
-                                        if (this.value && !emailRegex.test(this.value)) {
-                                            this.classList.add('error');
-                                            this.classList.remove('success');
-                                            emailError.textContent = 'Formato de email inválido';
-                                            emailError.style.display = 'block';
-                                        } else if (this.value) {
-                                            this.classList.remove('error');
-                                            this.classList.add('success');
-                                            emailError.style.display = 'none';
-                                        } else {
-                                            this.classList.remove('error');
-                                            this.classList.remove('success');
-                                            emailError.style.display = 'none';
-                                        }
-                                    });
-                                    
-                                    // Verificar reCAPTCHA
-                                    setTimeout(function() {
-                                        console.log('reCAPTCHA disponible:', typeof grecaptcha !== 'undefined');
-                                    }, 1000);
-                                    
-                                    // Nota: El carrusel ahora funciona automáticamente con CSS puro
-                                    console.log('Carrusel automático configurado con CSS puro');
+                                    // Resetear reCAPTCHA al limpiar el formulario
+                                    const resetBtn = document.querySelector('button[type="reset"]');
+                                    if (resetBtn) {
+                                        resetBtn.addEventListener('click', function() {
+                                            setTimeout(resetRecaptcha, 100);
+                                        });
+                                    }
                                 });
                                 """
                             }
@@ -1421,17 +1218,25 @@ fun main() {
                                 }
                             }
 
-                            // ===== FORMULARIO BÁSICO MINIMALISTA =====
+                            // ===== FORMULARIO BÁSICO MINIMALISTA CON VALIDACIONES HTML5 =====
                             div("form-container") {
                                 div("form-header") {
                                     h2("form-title") { +"Formulario de Contacto" }
                                     p("form-subtitle") { +"Complete el formulario con sus datos básicos" }
                                 }
 
+                                // Mostrar mensaje de éxito del formulario
+                                if (formSuccessMessage.isNotBlank()) {
+                                    div("success-message") {
+                                        +formSuccessMessage
+                                    }
+                                }
+
                                 div("form-wrapper") {
                                     form {
-                                        attributes["id"] = "formularioBasico"
-                                        attributes["onsubmit"] = "return validateForm(event);"
+                                        method = FormMethod.post
+                                        action = "/submit-form"
+                                        attributes["novalidate"] = "true" // Para usar nuestras validaciones personalizadas
 
                                         // Campo 1: Nombre completo
                                         div("form-group") {
@@ -1441,12 +1246,16 @@ fun main() {
                                             }
                                             input(type = InputType.text, classes = "form-input") {
                                                 attributes["id"] = "nombre"
+                                                attributes["name"] = "nombre"
                                                 attributes["placeholder"] = "Ingrese su nombre completo (solo letras)"
+                                                attributes["pattern"] = "^[A-Za-záéíóúÁÉÍÓÚñÑüÜ\\s]+$"
                                                 attributes["maxlength"] = "40"
+                                                attributes["required"] = "true"
+                                                attributes["title"] = "Solo letras y espacios, máximo 40 caracteres"
                                             }
-                                            div("error-message") {
-                                                attributes["id"] = "nombreError"
-                                                +"Solo letras, máximo 40 caracteres"
+                                            div("field-strength") {}
+                                            div("real-time-error") {
+                                                +"Solo letras y espacios, máximo 40 caracteres"
                                             }
                                             div("form-hint") {
                                                 +"Máximo 40 caracteres, solo letras y espacios"
@@ -1461,11 +1270,15 @@ fun main() {
                                             }
                                             input(type = InputType.email, classes = "form-input") {
                                                 attributes["id"] = "email"
+                                                attributes["name"] = "email"
                                                 attributes["placeholder"] = "ejemplo@correo.com"
+                                                attributes["required"] = "true"
+                                                attributes["pattern"] = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+                                                attributes["title"] = "Formato: usuario@dominio.com"
                                             }
-                                            div("error-message") {
-                                                attributes["id"] = "emailError"
-                                                +"Ingrese un email válido"
+                                            div("field-strength") {}
+                                            div("real-time-error") {
+                                                +"Formato inválido. Ejemplo: usuario@dominio.com"
                                             }
                                             div("form-hint") {
                                                 +"Ejemplo: usuario@dominio.com"
@@ -1480,12 +1293,16 @@ fun main() {
                                             }
                                             input(type = InputType.tel, classes = "form-input") {
                                                 attributes["id"] = "telefono"
+                                                attributes["name"] = "telefono"
                                                 attributes["placeholder"] = "1234567890"
+                                                attributes["pattern"] = "^\\d{10}$"
                                                 attributes["maxlength"] = "10"
+                                                attributes["required"] = "true"
+                                                attributes["title"] = "10 dígitos numéricos"
                                             }
-                                            div("error-message") {
-                                                attributes["id"] = "telefonoError"
-                                                +"Ingrese 10 dígitos numéricos"
+                                            div("field-strength") {}
+                                            div("real-time-error") {
+                                                +"10 dígitos numéricos sin espacios"
                                             }
                                             div("form-hint") {
                                                 +"Formato: 10 dígitos sin espacios ni guiones"
@@ -1500,19 +1317,27 @@ fun main() {
                                             }
                                             textArea(classes = "textarea-field") {
                                                 attributes["id"] = "mensaje"
-                                                attributes["placeholder"] = "Ingrese su mensaje (máximo 20 palabras, solo letras)"
+                                                attributes["name"] = "mensaje"
+                                                attributes["placeholder"] = "Ingrese su mensaje (máximo 20 palabras)"
                                                 attributes["rows"] = "4"
+                                                // CAMBIO AQUÍ: Nueva expresión regular que solo permite letras y espacios
+                                                attributes["pattern"] = "^[A-Za-záéíóúÁÉÍÓÚñÑüÜ\\s]*$"
+                                                attributes["title"] = "Solo letras y espacios están permitidos"
+                                                attributes["data-max-words"] = "20"
                                             }
-                                            div("error-message") {
-                                                attributes["id"] = "mensajeError"
-                                                +"Máximo 20 palabras, solo letras"
+                                            div("word-counter") {
+                                                +"Palabras: 0/20"
+                                            }
+                                            div("real-time-error") {
+                                                // Actualiza también el mensaje de error
+                                                +"Solo letras y espacios están permitidos, máximo 20 palabras"
                                             }
                                             div("form-hint") {
                                                 +"Máximo 20 palabras, solo letras y espacios"
                                             }
                                         }
 
-                                        // Campo 5: reCAPTCHA v2
+                                        // Campo 5: reCAPTCHA v2 (original de Google)
                                         div("form-group") {
                                             div("form-label required") {
                                                 +"Verificación de seguridad"
@@ -1538,6 +1363,7 @@ fun main() {
 
                                                 div("error-message") {
                                                     attributes["id"] = "recaptchaError"
+                                                    style = "display: none;"
                                                     +"Por favor, complete la verificación de seguridad"
                                                 }
                                                 div("form-hint") {
@@ -1551,7 +1377,9 @@ fun main() {
                                             div("checkbox-group") {
                                                 input(type = InputType.checkBox) {
                                                     attributes["id"] = "terminos"
+                                                    attributes["name"] = "terminos"
                                                     attributes["required"] = "true"
+                                                    attributes["title"] = "Debe aceptar los términos y condiciones"
                                                 }
                                                 label {
                                                     attributes["for"] = "terminos"
@@ -1560,8 +1388,7 @@ fun main() {
                                                     }
                                                 }
                                             }
-                                            div("error-message") {
-                                                attributes["id"] = "terminosError"
+                                            div("real-time-error") {
                                                 +"Debe aceptar los términos y condiciones"
                                             }
                                         }
@@ -1571,8 +1398,7 @@ fun main() {
                                             button(type = ButtonType.submit, classes = "submit-btn") {
                                                 +"Enviar Formulario"
                                             }
-                                            button(type = ButtonType.button, classes = "reset-btn") {
-                                                attributes["onclick"] = "return resetForm();"
+                                            button(type = ButtonType.reset, classes = "reset-btn") {
                                                 +"Limpiar Formulario"
                                             }
                                         }
@@ -1597,6 +1423,49 @@ fun main() {
                             }
                         }
                     }
+                }
+            }
+
+            // ========== RUTA PARA PROCESAR EL FORMULARIO (VALIDACIÓN DEL SERVIDOR) ==========
+            post("/submit-form") {
+                println("Procesando formulario...")
+
+                // Obtener datos del formulario
+                val params = call.receiveParameters()
+
+                // Crear objeto FormData
+                val formData = FormData(
+                    nombre = params["nombre"] ?: "",
+                    email = params["email"] ?: "",
+                    telefono = params["telefono"] ?: "",
+                    mensaje = params["mensaje"] ?: "",
+                    recaptchaToken = params["recaptchaToken"] ?: "",
+                    terminosAceptados = params["terminos"] != null
+                )
+
+                // Validar datos
+                val isValid = FormValidator.validate(formData)
+
+                if (isValid) {
+                    println("✅ Formulario válido recibido:")
+                    println("   Nombre: ${formData.nombre}")
+                    println("   Email: ${formData.email}")
+                    println("   Teléfono: ${formData.telefono}")
+                    println("   Mensaje: ${formData.mensaje}")
+                    println("   reCAPTCHA: Verificado")
+                    println("   Términos: ${formData.terminosAceptados}")
+
+                    // Aquí podrías guardar en base de datos, enviar email, etc.
+
+                    // Redirigir de vuelta con mensaje de éxito
+                    call.respondRedirect("/?success=true&message=" +
+                            URLEncoder.encode("✅ Formulario enviado exitosamente!", "UTF-8"))
+                } else {
+                    println("❌ Formulario inválido")
+
+                    // Redirigir de vuelta con mensaje de error
+                    call.respondRedirect("/?success=false&message=" +
+                            URLEncoder.encode("❌ Por favor, corrija los errores en el formulario", "UTF-8"))
                 }
             }
 
