@@ -1,6 +1,12 @@
 // Variables globales
 let personasData = [];
 let personaEnEdicion = null;
+let paginacion = {
+    currentPage: 1,
+    pageSize: 5,
+    totalRegistros: 0,
+    totalPages: 0
+};
 
 // Función para escapar HTML
 function escapeHtml(text) {
@@ -33,6 +39,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const personaForm = document.getElementById('personaForm');
     if (personaForm) personaForm.addEventListener('submit', guardarPersona);
 
+     // Eventos de paginación
+     const btnPrevPage = document.getElementById('btnPrevPage');
+     if (btnPrevPage) btnPrevPage.addEventListener('click', () => cambiarPagina(paginacion.currentPage - 1));
+
+     const btnNextPage = document.getElementById('btnNextPage');
+     if (btnNextPage) btnNextPage.addEventListener('click', () => cambiarPagina(paginacion.currentPage + 1));
+
     // Validación en tiempo real
     const inputs = document.querySelectorAll('#personaForm input, #personaForm select');
     inputs.forEach(input => {
@@ -53,18 +66,69 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// Función para cargar personas
-function cargarPersonas() {
-    fetch('/unidad2/api/personas')
+
+// Función para cambiar de página
+function cambiarPagina(nuevaPagina) {
+    if (nuevaPagina < 1 || nuevaPagina > paginacion.totalPages) return;
+    cargarPersonas(nuevaPagina);
+}
+
+
+// Función para cargar personas con paginación
+function cargarPersonas(page = 1) {
+    console.log(`Cargando personas - Página ${page}...`);
+
+    fetch(`/unidad2/api/personas?page=${page}&pageSize=5`)
         .then(response => response.json())
         .then(data => {
-            personasData = data;
+            console.log('Datos recibidos del servidor:', data);
+
+            // Guardar datos y paginación
+            personasData = data.data || [];
+            paginacion = data.pagination || {
+                currentPage: 1,
+                pageSize: 5,
+                totalRegistros: 0,
+                totalPages: 0
+            };
+
             mostrarPersonas(personasData);
+            actualizarInfoPaginacion();
         })
         .catch(error => {
             console.error('Error:', error);
             mostrarMensaje('error', 'Error al cargar las personas');
         });
+}
+
+// Función para actualizar la información de paginación en la UI
+function actualizarInfoPaginacion() {
+    const infoPaginacion = document.getElementById('paginationInfo');
+    const btnPrev = document.getElementById('btnPrevPage');
+    const btnNext = document.getElementById('btnNextPage');
+
+    if (infoPaginacion) {
+        const inicio = ((paginacion.currentPage - 1) * paginacion.pageSize) + 1;
+        const fin = Math.min(paginacion.currentPage * paginacion.pageSize, paginacion.totalRegistros);
+
+        infoPaginacion.innerHTML = `
+            Mostrando ${inicio} - ${fin} de ${paginacion.totalRegistros} registros
+            (Página ${paginacion.currentPage} de ${paginacion.totalPages})
+        `;
+    }
+
+    // Habilitar/deshabilitar botones de paginación
+    if (btnPrev) {
+        btnPrev.disabled = paginacion.currentPage <= 1;
+        btnPrev.style.opacity = btnPrev.disabled ? '0.5' : '1';
+        btnPrev.style.cursor = btnPrev.disabled ? 'not-allowed' : 'pointer';
+    }
+
+    if (btnNext) {
+        btnNext.disabled = paginacion.currentPage >= paginacion.totalPages;
+        btnNext.style.opacity = btnNext.disabled ? '0.5' : '1';
+        btnNext.style.cursor = btnNext.disabled ? 'not-allowed' : 'pointer';
+    }
 }
 
 // Función para mostrar personas en la tabla
@@ -74,7 +138,7 @@ function mostrarPersonas(lista) {
     if (!tbody) return;
 
     if (lista.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="padding: 40px; text-align: center; color: #9e9e9e;">No hay personas registradas</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="padding: 40px; text-align: center; color: #9e9e9e;">No hay personas registradas</td></tr>';
         return;
     }
 
@@ -85,7 +149,6 @@ function mostrarPersonas(lista) {
             : 'background: #ffebee; color: #c62828; padding: 4px 8px; border-radius: 12px; font-size: 0.85rem; display: inline-block;';
 
         html += `<tr>
-            <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">${persona.id}</td>
             <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">${escapeHtml(persona.nombre)}</td>
             <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">${escapeHtml(persona.apellido)}</td>
             <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">${escapeHtml(persona.email)}</td>
@@ -102,7 +165,7 @@ function mostrarPersonas(lista) {
     tbody.innerHTML = html;
 }
 
-// Función para filtrar personas
+// Función para filtrar personas (sobre los datos actuales)
 function filtrarPersonas() {
     const filtroInput = document.getElementById('filtroInput');
     if (!filtroInput) return;
@@ -110,19 +173,30 @@ function filtrarPersonas() {
     const filtro = filtroInput.value.toLowerCase().trim();
 
     if (!filtro) {
-        mostrarPersonas(personasData);
+        cargarPersonas(1); // Recargar primera página si no hay filtro
         return;
     }
 
-    const filtradas = personasData.filter(p =>
-        p.nombre.toLowerCase().includes(filtro) ||
-        p.apellido.toLowerCase().includes(filtro) ||
-        p.email.toLowerCase().includes(filtro) ||
-        p.telefono.includes(filtro) ||
-        p.genero.toLowerCase().includes(filtro)
-    );
+    // Para filtrado, necesitamos todos los datos, así que hacemos una petición sin paginación
+    fetch('/unidad2/api/personas?page=1&pageSize=1000') // Traer muchos para filtrar
+        .then(response => response.json())
+        .then(data => {
+            const todasLasPersonas = data.data || [];
+            const filtradas = todasLasPersonas.filter(p =>
+                p.nombre.toLowerCase().includes(filtro) ||
+                p.apellido.toLowerCase().includes(filtro) ||
+                p.email.toLowerCase().includes(filtro) ||
+                p.telefono.includes(filtro) ||
+                p.genero.toLowerCase().includes(filtro)
+            );
 
-    mostrarPersonas(filtradas);
+            // Mostrar solo las filtradas (sin paginación)
+            mostrarPersonas(filtradas);
+
+            // Ocultar controles de paginación durante el filtrado
+            document.getElementById('paginationControls').style.display = 'none';
+        })
+        .catch(error => console.error('Error:', error));
 }
 
 // Función para limpiar filtro

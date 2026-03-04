@@ -36,6 +36,7 @@ import io.ktor.server.request.header
 import io.ktor.server.request.receiveChannel
 import io.ktor.server.request.receiveNullable
 import io.ktor.server.request.receiveParameters
+import kotlinx.serialization.StringFormat
 
 
 // Data class para almacenar los datos del formulario tradicional
@@ -57,9 +58,23 @@ data class PersonaData(
     val email: String = "",
     val telefono: String = "",
     val genero: String = "",
-    val estado: String = "Activo"
+    val estado: String = ""
 )
 
+
+@Serializable
+data class PaginatedResponse<T>(
+    val data: List<T>,
+    val pagination: PaginationInfo
+)
+
+@Serializable
+data class PaginationInfo(
+    val currentPage: Int,
+    val pageSize: Int,
+    val totalRegistros: Long,
+    val totalPages: Int
+)
 // Validador simple del formulario
 object FormValidator {
     fun validate(formData: FormData): Boolean {
@@ -658,7 +673,7 @@ fun main() {
                     println("   Términos: ${formData.terminosAceptados}")
 
                     // Redirigir de vuelta con mensaje de éxito
-                    val mensajeExito = URLEncoder.encode("✅ Formulario tradicional enviado exitosamente!", "UTF-8")as String
+                    val mensajeExito = URLEncoder.encode("✅ Formulario tradicional enviado exitosamente!", "UTF-8")
                     call.respondRedirect("/unidad2/formulario?success=true&message=$mensajeExito")
 
                 } else {
@@ -672,31 +687,71 @@ fun main() {
 
             // ========== RUTAS PARA CRUD DE PERSONAS ==========
 
-            // Obtener todas las personas
+            // Obtener todas las personas con paginación
             get("/unidad2/api/personas") {
-                println("Obteniendo lista de personas")
+                println("Obteniendo lista de personas con paginación")
 
                 try {
-                    val personas = transaction {
-                        PersonasTable.selectAll().map {
-                            PersonaData(
-                                id = it[PersonasTable.id],
-                                nombre = it[PersonasTable.nombre],
-                                apellido = it[PersonasTable.apellido],
-                                email = it[PersonasTable.email],
-                                telefono = it[PersonasTable.telefono],
-                                genero = it[PersonasTable.genero],
-                                estado = it[PersonasTable.estado]
-                            )
-                        }
+                    // Obtener parámetros de paginación
+                    val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
+                    val pageSize = call.request.queryParameters["pageSize"]?.toIntOrNull() ?: 5
+                    val offset = (page - 1) * pageSize
+
+                    println("Página: $page, Tamaño: $pageSize, Offset: $offset")
+
+                    // Obtener total de registros
+                    val totalRegistros = transaction {
+                        PersonasTable.selectAll().count()
                     }
 
+                    // Obtener registros paginados
+                    val personas = transaction {
+                        PersonasTable.selectAll()
+                            .orderBy(PersonasTable.id to SortOrder.ASC)
+                            .limit(pageSize, offset.toLong())
+                            .map {
+                                PersonaData(
+                                    id = it[PersonasTable.id],
+                                    nombre = it[PersonasTable.nombre],
+                                    apellido = it[PersonasTable.apellido],
+                                    email = it[PersonasTable.email],
+                                    telefono = it[PersonasTable.telefono],
+                                    genero = it[PersonasTable.genero],
+                                    estado = it[PersonasTable.estado]
+                                )
+                            }
+                    }
+
+                    // Calcular total de páginas
+                    val totalPages = ((totalRegistros + pageSize - 1) / pageSize).toInt()
+
+                    // Crear objeto de respuesta con paginación
+                    val respuesta = PaginatedResponse(
+                        data = personas,
+                        pagination = PaginationInfo(
+                            currentPage = page,
+                            pageSize = pageSize,
+                            totalRegistros = totalRegistros,
+                            totalPages = totalPages
+                        )
+                    )
+
+                    // Configuración JSON
+                    val json = Json {
+                        encodeDefaults = true
+                        prettyPrint = false
+                    }
+
+                    val jsonString = json.encodeToString(respuesta)
+                    println("JSON enviado con paginación")
+
                     call.respondText(
-                        Json.encodeToString(personas),
+                        jsonString,
                         ContentType.Application.Json
                     )
                 } catch (e: Exception) {
                     println("❌ Error obteniendo personas: ${e.message}")
+                    e.printStackTrace() // Para ver más detalles del error
                     call.respondText(
                         Json.encodeToString(mapOf("error" to e.message)),
                         ContentType.Application.Json,
@@ -962,7 +1017,7 @@ fun main() {
                                                     thead {
                                                         style = "background: #f5f5f5;"
                                                         tr {
-                                                            th { style = "padding: 12px; text-align: left; border-bottom: 2px solid #e0e0e0; font-weight: 600; color: #212121; width: 50px;"; +"ID" }
+                                                            //th { style = "padding: 12px; text-align: left; border-bottom: 2px solid #e0e0e0; font-weight: 600; color: #212121; width: 50px;"; +"ID" }
                                                             th { style = "padding: 12px; text-align: left; border-bottom: 2px solid #e0e0e0; font-weight: 600; color: #212121;"; +"Nombre" }
                                                             th { style = "padding: 12px; text-align: left; border-bottom: 2px solid #e0e0e0; font-weight: 600; color: #212121;"; +"Apellido" }
                                                             th { style = "padding: 12px; text-align: left; border-bottom: 2px solid #e0e0e0; font-weight: 600; color: #212121;"; +"Email" }
@@ -978,11 +1033,39 @@ fun main() {
                                                         style = "background: white;"
                                                         tr {
                                                             td {
-                                                                attributes["colspan"] = "8"
+                                                                attributes["colspan"] = "7"
                                                                 style = "padding: 40px; text-align: center; color: #9e9e9e;"
                                                                 +"Cargando personas..."
                                                             }
                                                         }
+                                                    }
+                                                }
+                                            }
+
+                                            // Controles de paginación
+                                            div("pagination-controls") {
+                                                id = "paginationControls"
+                                                style = "display: flex; justify-content: space-between; align-items: center; margin: 20px 0; padding: 10px; background: #f5f5f5; border-radius: 4px;"
+
+                                                div("pagination-info") {
+                                                    id = "paginationInfo"
+                                                    style = "color: #616161; font-size: 0.9rem;"
+                                                    +"Cargando..."
+                                                }
+
+                                                div("pagination-buttons") {
+                                                    style = "display: flex; gap: 10px;"
+
+                                                    button(type = ButtonType.button) {
+                                                        id = "btnPrevPage"
+                                                        style = "padding: 8px 16px; background: #212121; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem;"
+                                                        +"Anterior"
+                                                    }
+
+                                                    button(type = ButtonType.button) {
+                                                        id = "btnNextPage"
+                                                        style = "padding: 8px 16px; background: #212121; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem;"
+                                                        +"Siguiente"
                                                     }
                                                 }
                                             }
